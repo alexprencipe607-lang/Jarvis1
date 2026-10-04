@@ -1,0 +1,336 @@
+<title>Jarvis</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Instrument+Sans:wght@400..700&display=swap">
+<style>
+/* Concetto: una scrivania con uno strumento al centro. Il quadrante con le tacche è l'unico elemento vistoso:
+   mostra l'ora e si muove quando Jarvis ascolta, pensa o parla. Il resto è carta, inchiostro e linee sottili.
+   Su schermo largo: conversazione a sinistra, scrivania (oggi, attività, agenda, note, contatti, spese) a destra. */
+:root {
+  --bg: #eceef1;
+  --surface: #f8f9fb;
+  --surface-2: #e1e5ea;
+  --field: #ffffff;
+  --ink: #161a22;
+  --muted: #59626f;
+  --line: #d0d6dd;
+  --tick: #a3abb6;
+  --accent: #2f3fd8;
+  --accent-ink: #ffffff;
+  --accent-soft: #e0e4ff;
+  --ring: rgba(47, 63, 216, 0.38);
+  --signal: #8a5a00;
+  --signal-bg: #ffecc2;
+  --danger: #b3261e;
+  --ok: #17724d;
+  --font-display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", sans-serif;
+  --font-body: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1220;
+    --surface: #171b30;
+    --surface-2: #20253d;
+    --field: #20253d;
+    --ink: #e9ecf6;
+    --muted: #98a0b8;
+    --line: #2a3050;
+    --tick: #4a5278;
+    --accent: #8f9bff;
+    --accent-ink: #0d1030;
+    --accent-soft: #232a5a;
+    --ring: rgba(143, 155, 255, 0.42);
+    --signal: #ffbf3c;
+    --signal-bg: #3a2e10;
+    --danger: #ff9187;
+    --ok: #5fd9a2;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1220;
+  --surface: #171b30;
+  --surface-2: #20253d;
+  --field: #20253d;
+  --ink: #e9ecf6;
+  --muted: #98a0b8;
+  --line: #2a3050;
+  --tick: #4a5278;
+  --accent: #8f9bff;
+  --accent-ink: #0d1030;
+  --accent-soft: #232a5a;
+  --ring: rgba(143, 155, 255, 0.42);
+  --signal: #ffbf3c;
+  --signal-bg: #3a2e10;
+  --danger: #ff9187;
+  --ok: #5fd9a2;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.45;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Struttura */
+.app {
+  height: 100%;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding-inline: 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-areas: "head" "tabs" "main";
+}
+.head { grid-area: head; display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; padding-block: 12px 6px; }
+.tabs { grid-area: tabs; }
+.talk { grid-area: talk; }
+.desk { grid-area: desk; }
+@media (min-width: 980px) {
+  .app { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); column-gap: 28px; grid-template-areas: "head head" "talk tabs" "talk desk"; }
+  .tab[data-tab="talk"] { display: none; }
+}
+@media (max-width: 979px) {
+  .talk, .desk { grid-area: main; }
+  .app[data-view="talk"] .desk { display: none; }
+  .app:not([data-view="talk"]) .talk { display: none; }
+}
+
+/* Testata */
+.brand { min-width: 0; }
+.brand h1 { margin: 0; font-family: var(--font-display); font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1.05; }
+.status { margin: 1px 0 0; font-size: 0.85rem; color: var(--muted); }
+.spacer { flex: 1; }
+.voice-btn {
+  height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--line);
+  background: var(--surface); font-size: 0.85rem; font-weight: 600;
+}
+.voice-btn[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.timers { display: flex; flex-wrap: wrap; gap: 6px; }
+.timers:empty { display: none; }
+.timer-chip { padding: 3px 10px; border-radius: 999px; background: var(--signal-bg); color: var(--signal); font-size: 0.82rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* Quadrante */
+.dial { display: block; }
+.mini { width: 42px; height: 42px; flex: none; }
+.mini .tk { stroke-width: 8; }
+.tk { stroke: var(--tick); stroke-width: 2.6; stroke-linecap: round; transform-box: fill-box; transform-origin: 50% 100%; }
+.tk.major { stroke: var(--accent); stroke-width: 3.6; }
+[data-state="listening"] .tk { animation: wave 1.3s ease-in-out infinite; animation-delay: calc(var(--i) * -22ms); }
+[data-state="speaking"] .tk { animation: talk 0.5s ease-in-out infinite alternate; animation-delay: var(--r); }
+[data-state="thinking"] .tk { animation: sweep 1.4s linear infinite; animation-delay: calc(var(--i) * -23ms); }
+@keyframes wave { 0%, 100% { transform: scaleY(0.8); stroke: var(--tick); } 50% { transform: scaleY(2); stroke: var(--accent); } }
+@keyframes talk { from { transform: scaleY(0.8); } to { transform: scaleY(1.9); stroke: var(--accent); } }
+@keyframes sweep { 0% { stroke: var(--accent); transform: scaleY(1.6); } 25%, 100% { stroke: var(--tick); transform: scaleY(1); } }
+@media (prefers-reduced-motion: reduce) { .tk { animation: none !important; } }
+
+/* Schede */
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.tabs::-webkit-scrollbar { display: none; }
+.tab {
+  flex: none; border: 0; background: none; padding: 10px 12px 9px; font-weight: 600; font-size: 0.92rem;
+  color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap;
+}
+.tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tab .n { margin-left: 5px; font-size: 0.78rem; color: var(--accent); font-variant-numeric: tabular-nums; }
+
+/* Colonna conversazione */
+.talk { min-height: 0; display: flex; flex-direction: column; }
+.talk-scroll { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; padding-bottom: 12px; }
+.hero { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 24px; align-items: center; padding-block: 8px 4px; }
+@media (max-width: 600px) { .hero { grid-template-columns: minmax(0, 1fr); gap: 14px; } }
+.hero-dial { position: relative; width: 184px; height: 184px; }
+.hero-dial svg { width: 100%; height: 100%; }
+.dial-text { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
+.clock { font-family: var(--font-display); font-weight: 600; font-size: 2.3rem; line-height: 1; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+.day { margin-top: 5px; font-size: 0.82rem; color: var(--muted); }
+.hero-copy h2 { margin: 0 0 6px; font-family: var(--font-display); font-weight: 650; font-size: 2rem; line-height: 1.08; letter-spacing: -0.025em; text-wrap: balance; }
+.hero-copy p { margin: 0; color: var(--muted); max-width: 46ch; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.chip { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 7px 13px; font-size: 0.88rem; text-align: left; }
+.chip:hover { border-color: var(--accent); }
+
+.msg { display: flex; flex-direction: column; gap: 2px; }
+.msg .who { font-size: 0.78rem; color: var(--muted); font-weight: 600; }
+.msg .body { white-space: pre-wrap; overflow-wrap: anywhere; }
+.msg.user { align-self: flex-end; align-items: flex-end; max-width: 88%; }
+.msg.user .body { background: var(--accent); color: var(--accent-ink); padding: 8px 14px; border-radius: 18px 18px 4px 18px; }
+.msg.assistant { max-width: 94%; }
+.msg.pending .body { color: var(--muted); }
+.msg.error .body { color: var(--danger); }
+
+.doc { border: 1px solid var(--line); background: var(--surface); border-radius: 14px; overflow: hidden; }
+.doc-h { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.doc-h strong { flex: 1 1 160px; min-width: 0; overflow-wrap: anywhere; font-family: var(--font-display); font-weight: 600; }
+.doc-b { margin: 0; padding: 12px; font-family: inherit; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.93rem; max-height: 340px; overflow-y: auto; }
+
+/* Barra di input */
+.composer { padding-block: 10px 12px; display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--line); }
+.bar { display: flex; gap: 10px; align-items: center; }
+.bar input { flex: 1; min-width: 0; }
+.mic {
+  flex: none; width: 56px; height: 56px; border-radius: 50%; border: 0;
+  background: var(--accent); color: var(--accent-ink); display: grid; place-items: center;
+  box-shadow: 0 8px 18px -8px var(--ring);
+}
+.mic svg { width: 25px; height: 25px; }
+.mic:disabled { opacity: 0.4; cursor: default; box-shadow: none; }
+[data-state="listening"] .mic { background: var(--danger); color: #fff; }
+.opts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; font-size: 0.85rem; color: var(--muted); }
+.opts label { display: inline-flex; align-items: center; gap: 6px; }
+.opts input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; background: var(--surface); }
+.seg button { border: 0; background: transparent; padding: 5px 13px; font-size: 0.85rem; font-weight: 600; color: var(--muted); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.attach-row { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); font-size: 0.85rem; }
+.attach-row span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.voice-set { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; font-size: 0.85rem; color: var(--muted); }
+.voice-set select { height: 34px; max-width: 100%; border-radius: 8px; border: 1px solid var(--line); background: var(--field); padding: 0 8px; color: var(--ink); }
+.save-note { font-size: 0.8rem; color: var(--muted); }
+.notice { margin: 0; padding: 9px 12px; border-radius: 10px; background: var(--signal-bg); color: var(--signal); font-size: 0.86rem; font-weight: 500; }
+[hidden] { display: none !important; }
+
+/* Scrivania */
+.desk { min-height: 0; }
+.sheet { height: 100%; overflow-y: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 16px; }
+.pane { display: flex; flex-direction: column; gap: 14px; }
+.today-head h2 { margin: 0; font-family: var(--font-display); font-weight: 650; font-size: 1.6rem; letter-spacing: -0.02em; line-height: 1.1; text-transform: capitalize; }
+.today-head p { margin: 4px 0 0; color: var(--muted); }
+.quick { display: flex; flex-wrap: wrap; gap: 8px; }
+.sec-h { margin: 8px 0 0; font-family: var(--font-display); font-weight: 600; font-size: 1.02rem; }
+.sec-h small { font-family: var(--font-body); font-weight: 500; color: var(--muted); font-size: 0.85rem; margin-left: 6px; }
+
+.list { display: flex; flex-direction: column; }
+.row { display: flex; align-items: flex-start; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.row:last-child { border-bottom: 0; }
+.row .main { flex: 1; min-width: 0; }
+.row .t { overflow-wrap: anywhere; }
+.row .meta { display: flex; flex-wrap: wrap; gap: 0 12px; margin-top: 1px; font-size: 0.83rem; color: var(--muted); overflow-wrap: anywhere; }
+.row.done .t { text-decoration: line-through; color: var(--muted); }
+.row .side { flex: none; font-weight: 600; font-variant-numeric: tabular-nums; }
+.row .acts { flex: none; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; max-width: 46%; }
+.late { color: var(--danger); }
+.check { flex: none; width: 22px; height: 22px; margin-top: 1px; accent-color: var(--accent); }
+.note-b { margin-top: 3px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.93rem; color: var(--muted); }
+.empty { margin: 0; color: var(--muted); padding: 6px 0; max-width: 50ch; }
+
+.form { display: flex; flex-wrap: wrap; gap: 8px; }
+.form > * { min-width: 0; }
+.form .grow { flex: 1 1 180px; }
+
+input[type="text"], input[type="date"], input[type="datetime-local"], input[type="search"], select.fld, textarea {
+  height: 42px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--field); color: var(--ink);
+}
+textarea { height: auto; min-height: 64px; padding: 9px 12px; resize: vertical; }
+input::placeholder, textarea::placeholder { color: var(--muted); }
+.btn {
+  height: 42px; padding: 0 16px; border-radius: 10px; border: 0;
+  background: var(--accent); color: var(--accent-ink); font-weight: 600;
+}
+.btn.ghost { background: var(--surface-2); color: var(--ink); }
+.btn:disabled { opacity: 0.5; cursor: default; }
+.small-btn { border: 1px solid var(--line); background: var(--surface-2); border-radius: 8px; padding: 4px 10px; font-size: 0.8rem; font-weight: 600; }
+.small-btn:hover { border-color: var(--accent); }
+.del { border: 0; background: none; color: var(--muted); font-size: 0.8rem; padding: 4px 6px; text-decoration: underline; }
+.del.armed { color: var(--danger); font-weight: 700; }
+.thumb { width: 44px; height: 44px; object-fit: cover; border-radius: 8px; flex: none; }
+.photo-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.voice-set input[type="password"], .voice-set input[type="text"] { height: 34px; border-radius: 8px; border: 1px solid var(--line); background: var(--field); padding: 0 8px; color: var(--ink); }
+.cam { display: flex; flex-direction: column; gap: 8px; }
+.cam video { width: 100%; max-height: 320px; border-radius: 12px; background: #000; object-fit: cover; }
+.cam-bar { display: flex; gap: 8px; }
+.total { font-family: var(--font-display); font-size: 1.6rem; font-weight: 650; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+</style>
+
+<div class="app" id="app" data-state="idle" data-view="talk">
+  <header class="head">
+    <svg class="dial mini" id="miniDial" viewBox="0 0 200 200" aria-hidden="true"></svg>
+    <div class="brand">
+      <h1>Jarvis</h1>
+      <p class="status" id="status" role="status">Connessione…</p>
+    </div>
+    <div class="spacer"></div>
+    <div class="timers" id="timers"></div>
+    <button class="voice-btn" id="voiceBtn" aria-pressed="true" title="Attiva o disattiva la voce di Jarvis">Voce attiva</button>
+  </header>
+
+  <nav class="tabs" role="tablist" id="tabs">
+    <button class="tab" role="tab" data-tab="talk" aria-selected="true">Parla</button>
+    <button class="tab" role="tab" data-tab="today" aria-selected="false">Oggi</button>
+    <button class="tab" role="tab" data-tab="tasks" aria-selected="false">Attività<span class="n" id="n-tasks"></span></button>
+    <button class="tab" role="tab" data-tab="events" aria-selected="false">Agenda<span class="n" id="n-events"></span></button>
+    <button class="tab" role="tab" data-tab="notes" aria-selected="false">Note<span class="n" id="n-notes"></span></button>
+    <button class="tab" role="tab" data-tab="contacts" aria-selected="false">Contatti<span class="n" id="n-contacts"></span></button>
+    <button class="tab" role="tab" data-tab="expenses" aria-selected="false">Spese</button>
+  </nav>
+
+  <section class="talk" id="p-talk">
+    <div class="talk-scroll" id="talkScroll">
+      <div class="hero" id="hero">
+        <div class="hero-dial">
+          <svg class="dial" id="bigDial" viewBox="0 0 200 200" aria-hidden="true"></svg>
+          <div class="dial-text"><div class="clock" id="clock">00:00</div><div class="day" id="dayText"></div></div>
+        </div>
+        <div class="hero-copy">
+          <h2 id="greet">Buongiorno</h2>
+          <p id="sum">Dimmi cosa serve.</p>
+          <div class="chips" id="chips"></div>
+        </div>
+      </div>
+      <div id="log" style="display:flex;flex-direction:column;gap:14px"></div>
+    </div>
+
+    <footer class="composer">
+      <p class="notice" id="notice" hidden></p>
+      <div class="attach-row" id="attachRow" hidden>
+        <img id="attachThumb" class="thumb" alt="Anteprima della foto" hidden>
+        <span id="attachName"></span>
+        <button class="small-btn" type="button" id="attachX">Rimuovi</button>
+      </div>
+      <div class="cam" id="camBox" hidden>
+        <video id="camVideo" autoplay playsinline muted></video>
+        <div class="cam-bar"><button class="btn" id="camShot" type="button">Scatta</button><button class="btn ghost" id="camClose" type="button">Chiudi</button></div>
+      </div>
+      <div class="photo-actions" id="photoActions" hidden>
+        <button class="small-btn" type="button" data-prompt="Descrivi cosa vedi in questa foto e dimmi se c'è qualcosa di rilevante per il lavoro.">Descrivi</button>
+        <button class="small-btn" type="button" data-prompt="Leggi tutto il testo visibile nella foto e mostralo con mostra_documento, poi dimmi a voce di cosa parla.">Leggi il testo</button>
+        <button class="small-btn" type="button" data-prompt="Questa foto è uno scontrino o una fattura. Leggi fornitore, data e totale, poi registra la spesa con registra_spesa scegliendo la categoria più adatta e conferma a voce. Se un dato non si legge bene, chiedimelo prima di registrare.">Registra scontrino</button>
+        <button class="small-btn" type="button" data-prompt="Questa foto è un biglietto da visita. Leggi i dati e salva il contatto con aggiungi_contatto, poi conferma a voce. Se un dato non si legge bene, chiedimelo.">Salva biglietto da visita</button>
+        <button class="small-btn" type="button" data-prompt="Questa foto è una lavagna o una pagina di appunti. Trascrivila con mostra_documento, poi crea le attività emerse con aggiungi_attivita e dimmi cosa hai creato.">Appunti in attività</button>
+        <button class="small-btn" type="button" data-mode="explain" data-prompt="Spiegami cosa mostra questa immagine, partendo dall'idea generale e poi nei dettagli, come se non la conoscessi.">Spiega</button>
+      </div>
+      <form class="bar" id="form">
+        <button class="mic" id="mic" type="button" aria-label="Parla con Jarvis">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+        </button>
+        <input type="text" id="input" placeholder="Parla o scrivi a Jarvis" aria-label="Messaggio per Jarvis" autocomplete="off" enterkeyhint="send">
+        <button class="btn" id="sendBtn" type="submit">Invia</button>
+      </form>
+      <div class="opts">
+        <div class="seg" role="group" aria-label="Modo di risposta">
+          <button type="button" id="m-fast" aria-pressed="true">Veloce</button>
+          <button type="button" id="m-explain" aria-pressed="false">Spiega</button>
+        </div>
+        <button class="small-btn" id="photoBtn" type="button">Foto</button>
+        <button class="small-btn" id="attachBtn" type="button">Allega</button>
+        <label><input type="checkbox" id="hands"> Mani libere</label>
+        <button class="small-btn" id="setBtn" type="button" aria-expanded="false">Impostazioni</button>
+      </div>
+      <div class="voice-set" id="voiceSet" hidden>
+        <label>Voce <select id="voiceSel"><option value="">Predefinita</option></select></label>
+        <label>Velocità <select id="rateSel"><option value="0.9">Lenta</option><option value="1.04" selected>Normale</option><option value="1.2">Veloce</option></select></label>
+        <button class="small-btn" id="testVoice" type="button">Prova la voce</button>
+        <label>Modello <select id="modelSel"><option value="claude-sonnet-5-5">Sonnet 5.5, consigliato</option><option value="claude-haiku-4-5-20251001">Haiku 4.5, più rapido ed economico</option></select></label>
+        <label style="flex:1 1 260px">Chiave API <input type="password" id="keyIn" placeholder="sk-ant-…" autocomplete="off" style="flex:1;min-width:0;width:100%"></label>
+        <button class="small-btn" id="keySave" type="button">Salva chiave</button>
+      </div>
+      <div class="sa
